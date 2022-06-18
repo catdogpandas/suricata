@@ -33,6 +33,16 @@
 void RegisterOPENFLOWParsers(void);
 void OPENFLOWParserRegisterTests(void);
 
+typedef struct OPENFLOWData_{
+    uint8_t version;
+    uint8_t type;
+    uint16_t length;
+    uint32_t transaction_id;
+    uint32_t buffer_id;
+    uint16_t total_length;
+
+} OPENFLOWData;
+
 typedef struct OPENFLOWTransaction
 {
     /** Internal transaction ID. */

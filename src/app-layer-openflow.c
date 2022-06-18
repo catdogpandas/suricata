@@ -282,7 +282,7 @@ static AppLayerResult OPENFLOWParseRequest(Flow *f, void *statev,
      * data belongs to.
      */
     if(input_len>=8){
-        SCLogNotice("hash1 %8x",input);
+        SCLogNotice("hash1 %8x",(uint64_t) *input);
     }
     OPENFLOWTransaction *tx = OPENFLOWTxAlloc(state);
     if (unlikely(tx == NULL)) {

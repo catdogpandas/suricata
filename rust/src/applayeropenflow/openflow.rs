@@ -286,6 +286,7 @@ pub extern "C" fn rs_openflow_parse_request(
 ) -> AppLayerResult {
     let state = cast_pointer!(state, OPENFLOWState);
 
+    SCLogNotice!("hash3");
     if input == std::ptr::null_mut() && input_len > 0 {
         AppLayerResult::ok()
     } else {
@@ -299,13 +300,7 @@ pub extern "C" fn rs_openflow_parse_response(
     _flow: *const Flow, state: *mut std::os::raw::c_void, pstate: *mut std::os::raw::c_void,
     input: *const u8, input_len: u32, _data: *const std::os::raw::c_void, _flags: u8,
 ) -> AppLayerResult {
-    let _eof = unsafe {
-        if AppLayerParserStateIssetFlag(pstate, APP_LAYER_PARSER_EOF_TC) > 0 {
-            true
-        } else {
-            false
-        }
-    };
+    SCLogNotice!("hash4");
     let state = cast_pointer!(state, OPENFLOWState);
 
     if input == std::ptr::null_mut() && input_len > 0 {

@@ -75,9 +75,6 @@ impl Drop for OPENFLOWTransaction {
 pub struct OPENFLOWState {
     tx_id: u64,
     transactions: Vec<OPENFLOWTransaction>,
-    request_gap: bool,
-    #[allow(dead_code)]
-    response_gap: bool,
 }
 
 impl OPENFLOWState {
@@ -85,8 +82,6 @@ impl OPENFLOWState {
         Self {
             tx_id: 0,
             transactions: Vec::new(),
-            request_gap: false,
-            response_gap: false,
         }
     }
 
@@ -137,19 +132,6 @@ impl OPENFLOWState {
         // We're not interested in empty requests.
         if input.len() == 0 {
             return AppLayerResult::ok();
-        }
-
-        // If there was gap, check we can sync up again.
-        if self.request_gap {
-            if probe(input).is_err() {
-                // The parser now needs to decide what to do as we are not in sync.
-                // For this openflow, we'll just try again next time.
-                return AppLayerResult::ok();
-            }
-
-            // It looks like we're in sync with a message header, clear gap
-            // state and keep parsing.
-            self.request_gap = false;
         }
 
         SCLogNotice!("hash1");
@@ -238,14 +220,6 @@ impl OPENFLOWState {
 
         return None;
     }
-
-    fn on_request_gap(&mut self, _size: u32) {
-        self.request_gap = true;
-    }
-
-    fn on_response_gap(&mut self, _size: u32) {
-        self.response_gap = true;
-    }
 }
 
 /// Probe for a valid header.
@@ -310,25 +284,9 @@ pub extern "C" fn rs_openflow_parse_request(
     _flow: *const Flow, state: *mut std::os::raw::c_void, pstate: *mut std::os::raw::c_void,
     input: *const u8, input_len: u32, _data: *const std::os::raw::c_void, _flags: u8,
 ) -> AppLayerResult {
-    let eof = unsafe {
-        if AppLayerParserStateIssetFlag(pstate, APP_LAYER_PARSER_EOF_TS) > 0 {
-            true
-        } else {
-            false
-        }
-    };
-
-    if eof {
-        // If needed, handled EOF, or pass it into the parser.
-        return AppLayerResult::ok();
-    }
-
     let state = cast_pointer!(state, OPENFLOWState);
 
     if input == std::ptr::null_mut() && input_len > 0 {
-        // Here we have a gap signaled by the input being null, but a greater
-        // than 0 input_len which provides the size of the gap.
-        state.on_request_gap(input_len);
         AppLayerResult::ok()
     } else {
         let buf = build_slice!(input, input_len as usize);
@@ -351,9 +309,6 @@ pub extern "C" fn rs_openflow_parse_response(
     let state = cast_pointer!(state, OPENFLOWState);
 
     if input == std::ptr::null_mut() && input_len > 0 {
-        // Here we have a gap signaled by the input being null, but a greater
-        // than 0 input_len which provides the size of the gap.
-        state.on_response_gap(input_len);
         AppLayerResult::ok()
     } else {
         let buf = build_slice!(input, input_len as usize);
@@ -519,7 +474,7 @@ pub unsafe extern "C" fn rs_openflow_register_parser() {
         get_tx_iterator: Some(rs_openflow_state_get_tx_iterator),
         get_tx_data: rs_openflow_get_tx_data,
         apply_tx_config: None,
-        flags: APP_LAYER_PARSER_OPT_ACCEPT_GAPS,
+        flags: 0,
         truncate: None,
     };
 

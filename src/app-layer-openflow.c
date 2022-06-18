@@ -206,6 +206,7 @@ static AppProto OPENFLOWProbingParserTs(Flow *f, uint8_t direction,
         const uint8_t *input, uint32_t input_len, uint8_t *rdir)
 {
     /* Very simple test - if there is input, this is openflow. */
+        SCLogNotice("Detected as ALPROTO_OPENFLOW.");
     if (input_len >= OPENFLOW_MIN_FRAME_LEN) {
         SCLogNotice("Detected as ALPROTO_OPENFLOW.");
         return ALPROTO_OPENFLOW;

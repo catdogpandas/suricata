@@ -15,17 +15,22 @@
  * 02110-1301, USA.
  */
 
-use std;
-use crate::core::{self, ALPROTO_UNKNOWN, AppProto, Flow, IPPROTO_TCP};
-use std::mem::transmute;
-use crate::applayer::{self, *};
-use std::ffi::CString;
-use nom;
 use super::parser;
+use crate::applayer::{self, *};
+use crate::core::{self, AppProto, Flow, ALPROTO_UNKNOWN, IPPROTO_TCP};
+use nom;
+use std;
+use std::ffi::CString;
+use std::mem::transmute;
 
 static mut ALPROTO_OPENFLOW: AppProto = ALPROTO_UNKNOWN;
 
 pub struct OPENFLOWTransaction {
+    version: u8,
+    of_type: u8,
+    of_length: u16,
+    of_transaction_id: u32,
+
     tx_id: u64,
     pub request: Option<String>,
     pub response: Option<String>,
@@ -38,6 +43,10 @@ pub struct OPENFLOWTransaction {
 impl OPENFLOWTransaction {
     pub fn new() -> OPENFLOWTransaction {
         OPENFLOWTransaction {
+            version: 4,
+            of_type: 2,
+            of_length: 8,
+            of_transaction_id: 0,
             tx_id: 0,
             request: None,
             response: None,
@@ -143,6 +152,7 @@ impl OPENFLOWState {
             self.request_gap = false;
         }
 
+        SCLogNotice!("hash1");
         let mut start = input;
         while start.len() > 0 {
             match parser::parse_message(start) {
@@ -153,7 +163,7 @@ impl OPENFLOWState {
                     let mut tx = self.new_tx();
                     tx.request = Some(request);
                     self.transactions.push(tx);
-                },
+                }
                 Err(nom::Err::Incomplete(_)) => {
                     // Not enough data. This parser doesn't give us a good indication
                     // of how much data is missing so just ask for one more byte so the
@@ -161,10 +171,10 @@ impl OPENFLOWState {
                     let consumed = input.len() - start.len();
                     let needed = start.len() + 1;
                     return AppLayerResult::incomplete(consumed as u32, needed as u32);
-                },
+                }
                 Err(_) => {
                     return AppLayerResult::err();
-                },
+                }
             }
         }
 
@@ -178,6 +188,7 @@ impl OPENFLOWState {
             return AppLayerResult::ok();
         }
 
+        SCLogNotice!("hash2");
         let mut start = input;
         while start.len() > 0 {
             match parser::parse_message(start) {
@@ -210,9 +221,7 @@ impl OPENFLOWState {
     }
 
     fn tx_iterator(
-        &mut self,
-        min_tx_id: u64,
-        state: &mut u64,
+        &mut self, min_tx_id: u64, state: &mut u64,
     ) -> Option<(&OPENFLOWTransaction, u64, bool)> {
         let mut index = *state as usize;
         let len = self.transactions.len();
@@ -256,26 +265,17 @@ fn probe(input: &[u8]) -> nom::IResult<&[u8], ()> {
 
 // C exports.
 
-export_tx_get_detect_state!(
-    rs_openflow_tx_get_detect_state,
-    OPENFLOWTransaction
-);
-export_tx_set_detect_state!(
-    rs_openflow_tx_set_detect_state,
-    OPENFLOWTransaction
-);
+export_tx_get_detect_state!(rs_openflow_tx_get_detect_state, OPENFLOWTransaction);
+export_tx_set_detect_state!(rs_openflow_tx_set_detect_state, OPENFLOWTransaction);
 
 /// C entry point for a probing parser.
 #[no_mangle]
 pub extern "C" fn rs_openflow_probing_parser(
-    _flow: *const Flow,
-    _direction: u8,
-    input: *const u8,
-    input_len: u32,
-    _rdir: *mut u8
+    _flow: *const Flow, _direction: u8, input: *const u8, input_len: u32, _rdir: *mut u8,
 ) -> AppProto {
     // Need at least 2 bytes.
     if input_len > 1 && input != std::ptr::null_mut() {
+        SCLogNotice!("- Request: {:?}", input);
         let slice = build_slice!(input, input_len as usize);
         if probe(slice).is_ok() {
             return unsafe { ALPROTO_OPENFLOW };
@@ -285,7 +285,9 @@ pub extern "C" fn rs_openflow_probing_parser(
 }
 
 #[no_mangle]
-pub extern "C" fn rs_openflow_state_new(_orig_state: *mut std::os::raw::c_void, _orig_proto: AppProto) -> *mut std::os::raw::c_void {
+pub extern "C" fn rs_openflow_state_new(
+    _orig_state: *mut std::os::raw::c_void, _orig_proto: AppProto,
+) -> *mut std::os::raw::c_void {
     let state = OPENFLOWState::new();
     let boxed = Box::new(state);
     return unsafe { transmute(boxed) };
@@ -298,23 +300,15 @@ pub extern "C" fn rs_openflow_state_free(state: *mut std::os::raw::c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn rs_openflow_state_tx_free(
-    state: *mut std::os::raw::c_void,
-    tx_id: u64,
-) {
+pub extern "C" fn rs_openflow_state_tx_free(state: *mut std::os::raw::c_void, tx_id: u64) {
     let state = cast_pointer!(state, OPENFLOWState);
     state.free_tx(tx_id);
 }
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_parse_request(
-    _flow: *const Flow,
-    state: *mut std::os::raw::c_void,
-    pstate: *mut std::os::raw::c_void,
-    input: *const u8,
-    input_len: u32,
-    _data: *const std::os::raw::c_void,
-    _flags: u8,
+    _flow: *const Flow, state: *mut std::os::raw::c_void, pstate: *mut std::os::raw::c_void,
+    input: *const u8, input_len: u32, _data: *const std::os::raw::c_void, _flags: u8,
 ) -> AppLayerResult {
     let eof = unsafe {
         if AppLayerParserStateIssetFlag(pstate, APP_LAYER_PARSER_EOF_TS) > 0 {
@@ -344,13 +338,8 @@ pub extern "C" fn rs_openflow_parse_request(
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_parse_response(
-    _flow: *const Flow,
-    state: *mut std::os::raw::c_void,
-    pstate: *mut std::os::raw::c_void,
-    input: *const u8,
-    input_len: u32,
-    _data: *const std::os::raw::c_void,
-    _flags: u8,
+    _flow: *const Flow, state: *mut std::os::raw::c_void, pstate: *mut std::os::raw::c_void,
+    input: *const u8, input_len: u32, _data: *const std::os::raw::c_void, _flags: u8,
 ) -> AppLayerResult {
     let _eof = unsafe {
         if AppLayerParserStateIssetFlag(pstate, APP_LAYER_PARSER_EOF_TC) > 0 {
@@ -374,8 +363,7 @@ pub extern "C" fn rs_openflow_parse_response(
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_get_tx(
-    state: *mut std::os::raw::c_void,
-    tx_id: u64,
+    state: *mut std::os::raw::c_void, tx_id: u64,
 ) -> *mut std::os::raw::c_void {
     let state = cast_pointer!(state, OPENFLOWState);
     match state.get_tx(tx_id) {
@@ -389,9 +377,7 @@ pub extern "C" fn rs_openflow_state_get_tx(
 }
 
 #[no_mangle]
-pub extern "C" fn rs_openflow_state_get_tx_count(
-    state: *mut std::os::raw::c_void,
-) -> u64 {
+pub extern "C" fn rs_openflow_state_get_tx_count(state: *mut std::os::raw::c_void) -> u64 {
     let state = cast_pointer!(state, OPENFLOWState);
     return state.tx_id;
 }
@@ -406,8 +392,7 @@ pub extern "C" fn rs_openflow_state_progress_completion_status(
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_tx_get_alstate_progress(
-    tx: *mut std::os::raw::c_void,
-    _direction: u8,
+    tx: *mut std::os::raw::c_void, _direction: u8,
 ) -> std::os::raw::c_int {
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
 
@@ -420,7 +405,7 @@ pub extern "C" fn rs_openflow_tx_get_alstate_progress(
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_get_events(
-    tx: *mut std::os::raw::c_void
+    tx: *mut std::os::raw::c_void,
 ) -> *mut core::AppLayerDecoderEvents {
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
     return tx.events;
@@ -428,38 +413,29 @@ pub extern "C" fn rs_openflow_state_get_events(
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_get_event_info(
-    _event_name: *const std::os::raw::c_char,
-    _event_id: *mut std::os::raw::c_int,
+    _event_name: *const std::os::raw::c_char, _event_id: *mut std::os::raw::c_int,
     _event_type: *mut core::AppLayerEventType,
 ) -> std::os::raw::c_int {
     return -1;
 }
 
 #[no_mangle]
-pub extern "C" fn rs_openflow_state_get_event_info_by_id(_event_id: std::os::raw::c_int,
-                                                         _event_name: *mut *const std::os::raw::c_char,
-                                                         _event_type: *mut core::AppLayerEventType
+pub extern "C" fn rs_openflow_state_get_event_info_by_id(
+    _event_id: std::os::raw::c_int, _event_name: *mut *const std::os::raw::c_char,
+    _event_type: *mut core::AppLayerEventType,
 ) -> i8 {
     return -1;
 }
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_get_tx_iterator(
-    _ipproto: u8,
-    _alproto: AppProto,
-    state: *mut std::os::raw::c_void,
-    min_tx_id: u64,
-    _max_tx_id: u64,
-    istate: &mut u64,
+    _ipproto: u8, _alproto: AppProto, state: *mut std::os::raw::c_void, min_tx_id: u64,
+    _max_tx_id: u64, istate: &mut u64,
 ) -> applayer::AppLayerGetTxIterTuple {
     let state = cast_pointer!(state, OPENFLOWState);
     match state.tx_iterator(min_tx_id, istate) {
         Some((tx, out_tx_id, has_next)) => {
             let c_tx = unsafe { transmute(tx) };
-            let ires = applayer::AppLayerGetTxIterTuple::with_values(
-                c_tx,
-                out_tx_id,
-                has_next,
-            );
+            let ires = applayer::AppLayerGetTxIterTuple::with_values(c_tx, out_tx_id, has_next);
             return ires;
         }
         None => {
@@ -474,11 +450,8 @@ pub extern "C" fn rs_openflow_state_get_tx_iterator(
 /// pointer to the request buffer from C for detection.
 #[no_mangle]
 pub extern "C" fn rs_openflow_get_request_buffer(
-    tx: *mut std::os::raw::c_void,
-    buf: *mut *const u8,
-    len: *mut u32,
-) -> u8
-{
+    tx: *mut std::os::raw::c_void, buf: *mut *const u8, len: *mut u32,
+) -> u8 {
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
     if let Some(ref request) = tx.request {
         if request.len() > 0 {
@@ -495,11 +468,8 @@ pub extern "C" fn rs_openflow_get_request_buffer(
 /// Get the response buffer for a transaction from C.
 #[no_mangle]
 pub extern "C" fn rs_openflow_get_response_buffer(
-    tx: *mut std::os::raw::c_void,
-    buf: *mut *const u8,
-    len: *mut u32,
-) -> u8
-{
+    tx: *mut std::os::raw::c_void, buf: *mut *const u8, len: *mut u32,
+) -> u8 {
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
     if let Some(ref response) = tx.response {
         if response.len() > 0 {
@@ -520,7 +490,7 @@ const PARSER_NAME: &'static [u8] = b"openflow\0";
 
 #[no_mangle]
 pub unsafe extern "C" fn rs_openflow_register_parser() {
-    let default_port = CString::new("[7000]").unwrap();
+    let default_port = CString::new("[6633]").unwrap();
     let parser = RustParser {
         name: PARSER_NAME.as_ptr() as *const std::os::raw::c_char,
         default_port: default_port.as_ptr(),
@@ -542,7 +512,7 @@ pub unsafe extern "C" fn rs_openflow_register_parser() {
         set_de_state: rs_openflow_tx_set_detect_state,
         get_events: Some(rs_openflow_state_get_events),
         get_eventinfo: Some(rs_openflow_state_get_event_info),
-        get_eventinfo_byid : Some(rs_openflow_state_get_event_info_by_id),
+        get_eventinfo_byid: Some(rs_openflow_state_get_event_info_by_id),
         localstorage_new: None,
         localstorage_free: None,
         get_files: None,
@@ -555,18 +525,10 @@ pub unsafe extern "C" fn rs_openflow_register_parser() {
 
     let ip_proto_str = CString::new("tcp").unwrap();
 
-    if AppLayerProtoDetectConfProtoDetectionEnabled(
-        ip_proto_str.as_ptr(),
-        parser.name,
-    ) != 0
-    {
+    if AppLayerProtoDetectConfProtoDetectionEnabled(ip_proto_str.as_ptr(), parser.name) != 0 {
         let alproto = AppLayerRegisterProtocolDetection(&parser, 1);
         ALPROTO_OPENFLOW = alproto;
-        if AppLayerParserConfParserEnabled(
-            ip_proto_str.as_ptr(),
-            parser.name,
-        ) != 0
-        {
+        if AppLayerParserConfParserEnabled(ip_proto_str.as_ptr(), parser.name) != 0 {
             let _ = AppLayerRegisterParser(&parser, alproto);
         }
         SCLogNotice!("Rust openflow parser registered.");
@@ -593,20 +555,55 @@ mod test {
         let buf = b"5:Hello3:bye";
 
         let r = state.parse_request(&buf[0..0]);
-        assert_eq!(r, AppLayerResult{ status: 0, consumed: 0, needed: 0});
+        assert_eq!(
+            r,
+            AppLayerResult {
+                status: 0,
+                consumed: 0,
+                needed: 0
+            }
+        );
 
         let r = state.parse_request(&buf[0..1]);
-        assert_eq!(r, AppLayerResult{ status: 1, consumed: 0, needed: 2});
+        assert_eq!(
+            r,
+            AppLayerResult {
+                status: 1,
+                consumed: 0,
+                needed: 2
+            }
+        );
 
         let r = state.parse_request(&buf[0..2]);
-        assert_eq!(r, AppLayerResult{ status: 1, consumed: 0, needed: 3});
+        assert_eq!(
+            r,
+            AppLayerResult {
+                status: 1,
+                consumed: 0,
+                needed: 3
+            }
+        );
 
         // This is the first message and only the first message.
         let r = state.parse_request(&buf[0..7]);
-        assert_eq!(r, AppLayerResult{ status: 0, consumed: 0, needed: 0});
+        assert_eq!(
+            r,
+            AppLayerResult {
+                status: 0,
+                consumed: 0,
+                needed: 0
+            }
+        );
 
         // The first message and a portion of the second.
         let r = state.parse_request(&buf[0..9]);
-        assert_eq!(r, AppLayerResult{ status: 1, consumed: 7, needed: 3});
+        assert_eq!(
+            r,
+            AppLayerResult {
+                status: 1,
+                consumed: 7,
+                needed: 3
+            }
+        );
     }
 }

@@ -247,8 +247,6 @@ static AppLayerResult OPENFLOWParseRequest(Flow *f, void *statev,
 
     if (input == NULL) {
         if (AppLayerParserStateIssetFlag(pstate, APP_LAYER_PARSER_EOF_TS)) {
-            /* This is a signal that the stream is done. Do any
-             * cleanup if needed. Usually nothing is required here. */
             SCReturnStruct(APP_LAYER_OK);
         } else if (flags & STREAM_GAP) {
             /* This is a signal that there has been a gap in the
@@ -283,6 +281,9 @@ static AppLayerResult OPENFLOWParseRequest(Flow *f, void *statev,
      * may need to look for the transaction that this newly recieved
      * data belongs to.
      */
+    if(input_len==8){
+        SCLogNotice("%8x",input);
+    }
     OPENFLOWTransaction *tx = OPENFLOWTxAlloc(state);
     if (unlikely(tx == NULL)) {
         SCLogNotice("Failed to allocate new OPENFLOW tx.");

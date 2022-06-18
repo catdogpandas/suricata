@@ -16,7 +16,7 @@
  */
 
 /*
- * TODO: Update \author in this file and app-layer-openflowrust.h.
+ * TODO: Update \author in this file and app-layer-openflow.h.
  * TODO: Implement your app-layer logic with unit tests.
  * TODO: Remove SCLogNotice statements or convert to debug.
  */

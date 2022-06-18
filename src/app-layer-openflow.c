@@ -45,7 +45,7 @@
 
 /* The default port to probe for echo traffic if not provided in the
  * configuration file. */
-#define OPENFLOW_DEFAULT_PORT "7"
+#define OPENFLOW_DEFAULT_PORT "6633"
 
 /* The minimum size for a message. For some protocols this might
  * be the size of a header. */

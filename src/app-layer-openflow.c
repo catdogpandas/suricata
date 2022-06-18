@@ -281,8 +281,13 @@ static AppLayerResult OPENFLOWParseRequest(Flow *f, void *statev,
      * may need to look for the transaction that this newly recieved
      * data belongs to.
      */
+    OPENFLOWData *tx_data = SCCalloc(1, sizeof(OPENFLOWData));
     if(input_len>=8){
-        SCLogNotice("hash1 %8x",(uint64_t) *input);
+        tx_data->version = input[0];
+        tx_data->type = input[1];
+        tx_data->length = (uint16_t)(*(input+2));
+        tx_data->transaction_id = (uint32_t)(*(input+4));
+        SCLogNotice("version: %1x, type: %1x, length: %2x, transaction id: %4x",tx_data->version,tx_data->type,tx_data->length,tx_data->transaction_id);
     }
     OPENFLOWTransaction *tx = OPENFLOWTxAlloc(state);
     if (unlikely(tx == NULL)) {

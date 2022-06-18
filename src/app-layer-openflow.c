@@ -49,7 +49,7 @@
 
 /* The minimum size for a message. For some protocols this might
  * be the size of a header. */
-#define OPENFLOW_MIN_FRAME_LEN 1
+#define OPENFLOW_MIN_FRAME_LEN 8
 
 /* Enum of app-layer events for the protocol. Normally you might
  * have events for errors in parsing data, like unexpected data being
@@ -206,7 +206,6 @@ static AppProto OPENFLOWProbingParserTs(Flow *f, uint8_t direction,
         const uint8_t *input, uint32_t input_len, uint8_t *rdir)
 {
     /* Very simple test - if there is input, this is openflow. */
-        SCLogNotice("Detected as ALPROTO_OPENFLOW.");
     if (input_len >= OPENFLOW_MIN_FRAME_LEN) {
         SCLogNotice("Detected as ALPROTO_OPENFLOW.");
         return ALPROTO_OPENFLOW;

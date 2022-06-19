@@ -131,11 +131,6 @@ impl OPENFLOWState {
                 match parser::openflow_parse_frame_packetin(input) {
                     Ok((_, packetin)) => {
                         SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
-                        SCLogNotice!(
-                            "OPENFLOWFramePacketIn: total_length: {:02X}, reason: {:01X}",
-                            packetin.total_length,
-                            packetin.reason
-                        );
                         return OPENFLOWFrameTypeData::PACKETIN(packetin);
                     }
                     Err(_) => {
@@ -168,17 +163,13 @@ impl OPENFLOWState {
                             head.flength,
                             head.transaction_id
                         );
+                        SCLogNotice!("OPENFLOWFramePacketIn: {:?}", rem);
                     }
                     // for packet_in data
                     if head.ftype != 0xa {
                         continue;
                     }
-                    let hlsafe = if rem.len() <= (head.flength - 8) as usize {
-                        rem.len()
-                    } else {
-                        head.flength as usize - 8
-                    };
-                    let txdata = self.parse_frame_data(head.ftype, &rem[..hlsafe]);
+                    let txdata = self.parse_frame_data(head.ftype, &rem[..]);
 
                     let mut tx = self.new_tx();
                     tx.frames.push(OPENFLOWFrame {

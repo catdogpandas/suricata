@@ -174,14 +174,7 @@ impl OPENFLOWState {
                         head.flength as usize - 8
                     };
                     let txdata = self.parse_frame_data(head.ftype, &rem[..hlsafe]);
-                    let txdatatmp = cast_pointer!(txdata, OPENFLOWFramePacketIn);
-                    SCLogNotice!(
-                        "OPENFLOWFramePacketIn: {} {} {:?} {:#?}",
-                        txdatatmp.buffer_id,
-                        txdatatmp.total_length,
-                        txdatatmp.fmatch,
-                        txdatatmp.data
-                    );
+                    SCLogNotice!("OPENFLOWFramePacketIn: {:#?}", rem);
 
                     let mut tx = self.new_tx();
                     tx.frames.push(OPENFLOWFrame {

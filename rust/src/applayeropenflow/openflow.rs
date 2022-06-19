@@ -137,14 +137,15 @@ impl OPENFLOWState {
             match parser::openflow_parse_frame_header(start) {
                 Ok((rem, head)) => {
                     start = rem;
-
-                    SCLogNotice!(
-                        "OPENFLOWFrameHeader: {} {} {} {}",
-                        head.version,
-                        head.ftype,
-                        head.flength,
-                        head.transaction_id
-                    );
+                    if head.ftype == 0xa {
+                        SCLogNotice!(
+                            "OPENFLOWFrameHeader: {} {} {} {}",
+                            head.version,
+                            head.ftype,
+                            head.flength,
+                            head.transaction_id
+                        );
+                    }
                     let mut tx = self.new_tx();
                     tx.frames.push(OPENFLOWFrame { header: head });
                     self.transactions.push(tx);
@@ -237,11 +238,15 @@ pub extern "C" fn rs_openflow_probing_parser(
 ) -> AppProto {
     // Need at least 2 bytes.
     SCLogNotice!("hash5");
-    if input_len > 1 && input != std::ptr::null_mut() {
+    if input_len >= 8 && input != std::ptr::null_mut() {
         SCLogNotice!("- Request: {:?}", input);
         let slice = build_slice!(input, input_len as usize);
         SCLogNotice!("hash6");
-        return unsafe { ALPROTO_OPENFLOW };
+        let openflow_version = slice[0];
+        // version from 1 to 7
+        if openflow_version <= 7 {
+            return unsafe { ALPROTO_OPENFLOW };
+        }
     }
     SCLogNotice!("hash7");
     return ALPROTO_UNKNOWN;

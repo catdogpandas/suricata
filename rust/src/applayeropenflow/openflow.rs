@@ -163,7 +163,7 @@ impl OPENFLOWState {
                             head.flength,
                             head.transaction_id
                         );
-                        SCLogNotice!("OPENFLOWFramePacketIn: {:?}", rem);
+                        //SCLogNotice!("OPENFLOWFramePacketIn: {:?}", rem);
                     }
                     // for packet_in data
                     if head.ftype != 0xa {

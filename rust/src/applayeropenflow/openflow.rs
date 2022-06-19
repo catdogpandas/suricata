@@ -165,16 +165,16 @@ impl OPENFLOWState {
                         );
                     }
                     // for packet_in data
-                    if head.ftype != 0xa || head.flength <= 8 {
+                    if head.ftype != 0xa || head.flength < 8 {
                         continue;
                     }
+                    SCLogNotice!("OPENFLOWFramePacketIn: {:?}", rem);
                     let hlsafe = if rem.len() <= (head.flength - 8) as usize {
                         rem.len()
                     } else {
                         head.flength as usize - 8
                     };
                     let txdata = self.parse_frame_data(head.ftype, &rem[..hlsafe]);
-                    SCLogNotice!("OPENFLOWFramePacketIn: {:#?}", rem);
 
                     let mut tx = self.new_tx();
                     tx.frames.push(OPENFLOWFrame {
@@ -239,9 +239,9 @@ pub extern "C" fn rs_openflow_probing_parser(
         SCLogNotice!("hash6");
         let openflow_version = slice[0];
         // version from 1 to 7
-        if openflow_version <= 7 {
+        //if openflow_version <= 7 {
             return unsafe { ALPROTO_OPENFLOW };
-        }
+        //}
     }
     SCLogNotice!("hash7");
     return ALPROTO_UNKNOWN;

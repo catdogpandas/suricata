@@ -15,8 +15,34 @@
  * 02110-1301, USA.
  */
 
+use nom::number::streaming::{be_u16, be_u32, be_u64, be_u8};
 use std;
-use nom::number::streaming::{be_u16, be_u32, be_u8};
+use std::fmt;
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, FromPrimitive, Debug)]
+pub enum OPENFLOWFrameType {
+    PACKETIN = 0,
+    UNHANDLED = 1,
+}
+impl fmt::Display for OPENFLOWFrameType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::str::FromStr for OPENFLOWFrameType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let su = s.to_uppercase();
+        let su_slice: &str = &*su;
+        match su_slice {
+            "PACKETIN" => Ok(OPENFLOWFrameType::PACKETIN),
+            _ => Err(format!("'{}' is not a valid value for OPENFLOWFrameType", s)),
+        }
+    }
+}
 
 pub struct OPENFLOWFrameHeader {
     pub version: u8,
@@ -31,19 +57,36 @@ fn parse_len(input: &str) -> Result<u32, std::num::ParseIntError> {
 
 named!(pub openflow_parse_frame_header<OPENFLOWFrameHeader>,
 do_parse!(
-     version: be_u8 >>
-     ftype: be_u8 >>
-     flength: be_u16 >>
-     transaction_id: be_u32 >>
-     (OPENFLOWFrameHeader{version, ftype, flength,
-         transaction_id})
+    version: be_u8 >>
+    ftype: be_u8 >>
+    flength: be_u16 >>
+    transaction_id: be_u32 >>
+    (OPENFLOWFrameHeader{version, ftype, flength,
+        transaction_id})
 ));
-pub struct OPENFLOWFrameData {
-    pub version: u8,
-    pub ftype: u8,
-    pub flength: u16,
-    pub transaction_id: u32,
+pub struct OPENFLOWFramePacketIn {
+    pub buffer_id: u32,
+    pub total_length: u16,
+    pub reason: u8,
+    pub table_id: u8,
+    pub cookie: u64,
+    pub fmatch: Vec<u8>,
+    pub pad: u16,
+    pub data: Vec<u8>,
 }
+named!(pub openflow_parse_frame_packetin<OPENFLOWFramePacketIn>,
+do_parse!(
+    buffer_id: be_u32 >>
+    total_length: be_u16 >>
+    reason: be_u8 >>
+    table_id: be_u8 >>
+    cookie: be_u64 >>
+    fmatch:take!(16)>>
+    pad:be_u16>>
+    data:take!(total_length)>>
+     (OPENFLOWFramePacketIn{buffer_id, total_length, reason,
+        table_id,cookie,fmatch:fmatch.to_vec(),pad,data:data.to_vec()})
+));
 
 #[cfg(test)]
 mod tests {
@@ -53,7 +96,5 @@ mod tests {
 
     /// Simple test of some valid data.
     #[test]
-    fn test_parse_valid() {
-        
-    }
+    fn test_parse_valid() {}
 }

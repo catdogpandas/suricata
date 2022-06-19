@@ -15,19 +15,25 @@
  * 02110-1301, USA.
  */
 
-use super::parser;
+use super::parser::{self, OPENFLOWFramePacketIn};
 use crate::applayer::{self, *};
 use crate::core::{self, AppProto, Flow, ALPROTO_UNKNOWN, IPPROTO_TCP};
 use nom;
 use std;
 use std::ffi::CString;
+use std::io;
 use std::mem::transmute;
 
 static mut ALPROTO_OPENFLOW: AppProto = ALPROTO_UNKNOWN;
 
+pub enum OPENFLOWFrameTypeData {
+    PACKETIN(parser::OPENFLOWFramePacketIn),
+    UNHANDLED,
+}
+
 pub struct OPENFLOWFrame {
     pub header: parser::OPENFLOWFrameHeader,
-    // pub data: parser::OPENFLOWFrameData,
+    pub data: OPENFLOWFrameTypeData,
 }
 pub struct OPENFLOWTransaction {
     tx_id: u64,
@@ -116,13 +122,25 @@ impl OPENFLOWState {
         return tx;
     }
 
-    fn find_request(&mut self) -> Option<&mut OPENFLOWTransaction> {
-        for tx in &mut self.transactions {
-            if tx.response.is_none() {
-                return Some(tx);
+    fn parse_frame_data(&mut self, ftype: u8, input: &[u8]) -> OPENFLOWFrameTypeData {
+        match num::FromPrimitive::from_u8(ftype) {
+            Some(parser::OPENFLOWFrameType::PACKETIN) => {
+                if input.len() < 32 {
+                    return OPENFLOWFrameTypeData::UNHANDLED;
+                }
+                match parser::openflow_parse_frame_packetin(input) {
+                    Ok((_, packetin)) => {
+                        return OPENFLOWFrameTypeData::PACKETIN(packetin);
+                    }
+                    Err(_) => {
+                        return OPENFLOWFrameTypeData::UNHANDLED;
+                    }
+                }
+            }
+            _ => {
+                return OPENFLOWFrameTypeData::UNHANDLED;
             }
         }
-        None
     }
 
     fn parse_request(&mut self, input: &[u8]) -> AppLayerResult {
@@ -146,8 +164,21 @@ impl OPENFLOWState {
                             head.transaction_id
                         );
                     }
+                    // for packet_in data
+                    if head.ftype != 0xa || head.flength <= 8 {
+                        continue;
+                    }
+                    let hlsafe = if rem.len() <= (head.flength - 8) as usize {
+                        rem.len()
+                    } else {
+                        head.flength as usize - 8
+                    };
+                    let txdata = self.parse_frame_data(head.ftype, &rem[..hlsafe]);
                     let mut tx = self.new_tx();
-                    tx.frames.push(OPENFLOWFrame { header: head });
+                    tx.frames.push(OPENFLOWFrame {
+                        header: head,
+                        data: txdata,
+                    });
                     self.transactions.push(tx);
                 }
                 Err(nom::Err::Incomplete(_)) => {
@@ -165,44 +196,6 @@ impl OPENFLOWState {
         }
 
         // Input was fully consumed.
-        return AppLayerResult::ok();
-    }
-
-    fn parse_response(&mut self, input: &[u8]) -> AppLayerResult {
-        // We're not interested in empty responses.
-        if input.len() == 0 {
-            return AppLayerResult::ok();
-        }
-
-        SCLogNotice!("hash2");
-        let mut start = input;
-        while start.len() > 0 {
-            match parser::openflow_parse_frame_header(start) {
-                Ok((rem, response)) => {
-                    start = rem;
-
-                    match self.find_request() {
-                        Some(tx) => {
-                            // tx.response = Some(response);
-                            SCLogNotice!("Found response for request:");
-                            SCLogNotice!("- Request: {:?}", tx.request);
-                            SCLogNotice!("- Response: {:?}", tx.response);
-                        }
-                        None => {}
-                    }
-                }
-                Err(nom::Err::Incomplete(_)) => {
-                    let consumed = input.len() - start.len();
-                    let needed = start.len() + 1;
-                    return AppLayerResult::incomplete(consumed as u32, needed as u32);
-                }
-                Err(_) => {
-                    return AppLayerResult::err();
-                }
-            }
-        }
-
-        // All input was fully consumed.
         return AppLayerResult::ok();
     }
 
@@ -286,22 +279,6 @@ pub extern "C" fn rs_openflow_parse_request(
     } else {
         let buf = build_slice!(input, input_len as usize);
         state.parse_request(buf)
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rs_openflow_parse_response(
-    _flow: *const Flow, state: *mut std::os::raw::c_void, pstate: *mut std::os::raw::c_void,
-    input: *const u8, input_len: u32, _data: *const std::os::raw::c_void, _flags: u8,
-) -> AppLayerResult {
-    SCLogNotice!("hash4");
-    let state = cast_pointer!(state, OPENFLOWState);
-
-    if input == std::ptr::null_mut() && input_len > 0 {
-        AppLayerResult::ok()
-    } else {
-        let buf = build_slice!(input, input_len as usize);
-        state.parse_response(buf).into()
     }
 }
 

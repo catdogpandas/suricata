@@ -24,8 +24,8 @@ use crate::smb::debug;
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, FromPrimitive, Debug)]
 pub enum OPENFLOWFrameType {
-    PACKETIN = 0,
-    UNHANDLED = 1,
+    PACKETIN = 10,
+    UNHANDLED = 11,
 }
 impl fmt::Display for OPENFLOWFrameType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

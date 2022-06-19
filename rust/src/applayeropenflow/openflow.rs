@@ -25,13 +25,13 @@ use std::mem::transmute;
 
 static mut ALPROTO_OPENFLOW: AppProto = ALPROTO_UNKNOWN;
 
+pub struct OPENFLOWFrame {
+    pub header: parser::OPENFLOWFrameHeader,
+    // pub data: parser::OPENFLOWFrameData,
+}
 pub struct OPENFLOWTransaction {
-    version: u8,
-    of_type: u8,
-    of_length: u16,
-    of_transaction_id: u32,
-
     tx_id: u64,
+    pub frames: Vec<OPENFLOWFrame>,
     pub request: Option<String>,
     pub response: Option<String>,
 
@@ -43,11 +43,8 @@ pub struct OPENFLOWTransaction {
 impl OPENFLOWTransaction {
     pub fn new() -> OPENFLOWTransaction {
         OPENFLOWTransaction {
-            version: 4,
-            of_type: 2,
-            of_length: 8,
-            of_transaction_id: 0,
             tx_id: 0,
+            frames: Vec::new(),
             request: None,
             response: None,
             de_state: None,
@@ -137,13 +134,19 @@ impl OPENFLOWState {
         SCLogNotice!("hash1");
         let mut start = input;
         while start.len() > 0 {
-            match parser::parse_message(start) {
-                Ok((rem, request)) => {
+            match parser::openflow_parse_frame_header(start) {
+                Ok((rem, head)) => {
                     start = rem;
 
-                    SCLogNotice!("Request: {}", request);
+                    SCLogNotice!(
+                        "OPENFLOWFrameHeader: {} {} {} {}",
+                        head.version,
+                        head.ftype,
+                        head.flength,
+                        head.transaction_id
+                    );
                     let mut tx = self.new_tx();
-                    tx.request = Some(request);
+                    tx.frames.push(OPENFLOWFrame { header: head });
                     self.transactions.push(tx);
                 }
                 Err(nom::Err::Incomplete(_)) => {
@@ -173,13 +176,13 @@ impl OPENFLOWState {
         SCLogNotice!("hash2");
         let mut start = input;
         while start.len() > 0 {
-            match parser::parse_message(start) {
+            match parser::openflow_parse_frame_header(start) {
                 Ok((rem, response)) => {
                     start = rem;
 
                     match self.find_request() {
                         Some(tx) => {
-                            tx.response = Some(response);
+                            // tx.response = Some(response);
                             SCLogNotice!("Found response for request:");
                             SCLogNotice!("- Request: {:?}", tx.request);
                             SCLogNotice!("- Response: {:?}", tx.response);
@@ -439,7 +442,7 @@ pub unsafe extern "C" fn rs_openflow_register_parser() {
         state_free: rs_openflow_state_free,
         tx_free: rs_openflow_state_tx_free,
         parse_ts: rs_openflow_parse_request,
-        parse_tc: rs_openflow_parse_response,
+        parse_tc: rs_openflow_parse_request,
         get_tx_count: rs_openflow_state_get_tx_count,
         get_tx: rs_openflow_state_get_tx,
         tx_get_comp_st: rs_openflow_state_progress_completion_status,

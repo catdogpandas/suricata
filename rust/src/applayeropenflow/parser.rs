@@ -16,50 +16,44 @@
  */
 
 use std;
+use nom::number::streaming::{be_u16, be_u32, be_u8};
+
+pub struct OPENFLOWFrameHeader {
+    pub version: u8,
+    pub ftype: u8,
+    pub flength: u16,
+    pub transaction_id: u32,
+}
 
 fn parse_len(input: &str) -> Result<u32, std::num::ParseIntError> {
     input.parse::<u32>()
 }
 
-named!(pub parse_message<String>,
-       do_parse!(
-           len:  map_res!(
-                 map_res!(take_until!(":"), std::str::from_utf8), parse_len) >>
-           _sep: take!(1) >>
-           msg:  take_str!(len) >>
-               (
-                   msg.to_string()
-               )
-       ));
+named!(pub openflow_parse_frame_header<OPENFLOWFrameHeader>,
+do_parse!(
+     version: be_u8 >>
+     ftype: be_u8 >>
+     flength: be_u16 >>
+     transaction_id: be_u32 >>
+     (OPENFLOWFrameHeader{version, ftype, flength,
+         transaction_id})
+));
+pub struct OPENFLOWFrameData {
+    pub version: u8,
+    pub ftype: u8,
+    pub flength: u16,
+    pub transaction_id: u32,
+}
 
 #[cfg(test)]
 mod tests {
 
-    use nom::*;
     use super::*;
+    use nom::*;
 
     /// Simple test of some valid data.
     #[test]
     fn test_parse_valid() {
-        let buf = b"12:Hello World!4:Bye.";
-
-        let result = parse_message(buf);
-        match result {
-            Ok((remainder, message)) => {
-                // Check the first message.
-                assert_eq!(message, "Hello World!");
-
-                // And we should have 6 bytes left.
-                assert_eq!(remainder.len(), 6);
-            }
-            Err(Err::Incomplete(_)) => {
-                panic!("Result should not have been incomplete.");
-            }
-            Err(Err::Error(err)) |
-            Err(Err::Failure(err)) => {
-                panic!("Result should not be an error: {:?}.", err);
-            }
-        }
+        
     }
-
 }

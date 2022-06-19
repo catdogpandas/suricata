@@ -130,6 +130,7 @@ impl OPENFLOWState {
                 }
                 match parser::openflow_parse_frame_packetin(input) {
                     Ok((_, packetin)) => {
+                        SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
                         return OPENFLOWFrameTypeData::PACKETIN(packetin);
                     }
                     Err(_) => {
@@ -149,7 +150,6 @@ impl OPENFLOWState {
             return AppLayerResult::ok();
         }
 
-        SCLogNotice!("hash1");
         let mut start = input;
         while start.len() > 0 {
             match parser::openflow_parse_frame_header(start) {
@@ -165,10 +165,9 @@ impl OPENFLOWState {
                         );
                     }
                     // for packet_in data
-                    if head.ftype != 0xa || head.flength < 8 {
+                    if head.ftype != 0xa {
                         continue;
                     }
-                    SCLogNotice!("OPENFLOWFramePacketIn: {:?}", rem);
                     let hlsafe = if rem.len() <= (head.flength - 8) as usize {
                         rem.len()
                     } else {
@@ -232,18 +231,15 @@ pub extern "C" fn rs_openflow_probing_parser(
     _flow: *const Flow, _direction: u8, input: *const u8, input_len: u32, _rdir: *mut u8,
 ) -> AppProto {
     // Need at least 2 bytes.
-    SCLogNotice!("hash5");
     if input_len >= 8 && input != std::ptr::null_mut() {
-        SCLogNotice!("- Request: {:?}", input);
+        //SCLogNotice!("- Request: {:?}", input);
         let slice = build_slice!(input, input_len as usize);
-        SCLogNotice!("hash6");
         let openflow_version = slice[0];
         // version from 1 to 7
         //if openflow_version <= 7 {
-            return unsafe { ALPROTO_OPENFLOW };
+        return unsafe { ALPROTO_OPENFLOW };
         //}
     }
-    SCLogNotice!("hash7");
     return ALPROTO_UNKNOWN;
 }
 
@@ -275,7 +271,6 @@ pub extern "C" fn rs_openflow_parse_request(
 ) -> AppLayerResult {
     let state = cast_pointer!(state, OPENFLOWState);
 
-    SCLogNotice!("hash3");
     if input == std::ptr::null_mut() && input_len > 0 {
         AppLayerResult::ok()
     } else {

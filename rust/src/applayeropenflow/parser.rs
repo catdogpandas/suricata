@@ -19,6 +19,8 @@ use nom::number::streaming::{be_u16, be_u32, be_u64, be_u8};
 use std;
 use std::fmt;
 
+use crate::smb::debug;
+
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, FromPrimitive, Debug)]
 pub enum OPENFLOWFrameType {
@@ -64,6 +66,8 @@ do_parse!(
     (OPENFLOWFrameHeader{version, ftype, flength,
         transaction_id})
 ));
+
+#[derive(Debug)]
 pub struct OPENFLOWFramePacketIn {
     pub buffer_id: u32,
     pub total_length: u16,

@@ -41,7 +41,10 @@ impl std::str::FromStr for OPENFLOWFrameType {
         let su_slice: &str = &*su;
         match su_slice {
             "PACKETIN" => Ok(OPENFLOWFrameType::PACKETIN),
-            _ => Err(format!("'{}' is not a valid value for OPENFLOWFrameType", s)),
+            _ => Err(format!(
+                "'{}' is not a valid value for OPENFLOWFrameType",
+                s
+            )),
         }
     }
 }
@@ -74,7 +77,9 @@ pub struct OPENFLOWFramePacketIn {
     pub reason: u8,
     pub table_id: u8,
     pub cookie: u64,
-    pub fmatch: Vec<u8>,
+    pub match_type: u16,
+    pub match_length: u16,
+    pub match_data: Vec<u8>,
     pub pad: u16,
     pub data: Vec<u8>,
 }
@@ -85,11 +90,13 @@ do_parse!(
     reason: be_u8 >>
     table_id: be_u8 >>
     cookie: be_u64 >>
-    fmatch:take!(16)>>
+    match_type:be_u16>>
+    match_length:be_u16>>
+    match_data:take!(match_length)>>
     pad:be_u16>>
     data:take!(total_length)>>
      (OPENFLOWFramePacketIn{buffer_id, total_length, reason,
-        table_id,cookie,fmatch:fmatch.to_vec(),pad,data:data.to_vec()})
+        table_id,cookie,match_type,match_length,match_data:match_data.to_vec(),pad,data:data.to_vec()})
 ));
 
 #[cfg(test)]

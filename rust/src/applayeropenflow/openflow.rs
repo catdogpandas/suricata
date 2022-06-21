@@ -131,7 +131,7 @@ impl OPENFLOWState {
                 }
                 match parser::openflow_parse_frame_packetin(input) {
                     Ok((rem, packetin)) => {
-                        SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
+                        // SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
                         decode::openflow_data_packet_parse(&packetin.data);
                         return OPENFLOWFrameTypeData::PACKETIN(packetin);
                     }

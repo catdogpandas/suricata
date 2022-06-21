@@ -5,18 +5,18 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 // Ethernet
 #[derive(Debug)]
-pub struct EthernetHdr_ {
+pub struct EthernetHdr {
     eth_dst: Vec<u8>,
     eth_src: Vec<u8>,
     eth_type: u16,
 }
 named!(
-    ethernet_header_parse<EthernetHdr_>,
+    ethernet_header_parse<EthernetHdr>,
     do_parse!(
-        eth_dst: take!(8)
-            >> eth_src: take!(8)
+        eth_dst: take!(6)
+            >> eth_src: take!(6)
             >> eth_type: be_u16
-            >> (EthernetHdr_ {
+            >> (EthernetHdr {
                 eth_dst: eth_dst.to_vec(),
                 eth_src: eth_src.to_vec(),
                 eth_type
@@ -26,7 +26,7 @@ named!(
 
 //IPV4
 #[derive(Debug)]
-pub struct IPV4Hdr_ {
+pub struct IPV4Hdr {
     ip_verhl: u8, //**< version & header length */
     ip_tos: u8,   //**< type of service */
     ip_len: u16,  //**< length */
@@ -40,7 +40,7 @@ pub struct IPV4Hdr_ {
     ip_dst: Ipv4Addr, //**< destination address */
 }
 named!(
-    ipv4_header_parse<IPV4Hdr_>,
+    ipv4_header_parse<IPV4Hdr>,
     do_parse!(
         ip_verhl: be_u8
             >> ip_tos: be_u8
@@ -52,7 +52,7 @@ named!(
             >> ip_csum: be_u16
             >> ip_src: take!(4)
             >> ip_dst: take!(4)
-            >> (IPV4Hdr_ {
+            >> (IPV4Hdr {
                 ip_verhl,
                 ip_tos,
                 ip_len,
@@ -69,20 +69,72 @@ named!(
 
 //ICMPV4
 #[derive(Debug)]
-pub struct ICMPV4Hdr_ {
+pub struct ICMPV4Hdr {
     ftype: u8,
     fcode: u8,
     checksum: u16,
 }
 named!(
-    icmpv4_header_parse<ICMPV4Hdr_>,
+    icmpv4_header_parse<ICMPV4Hdr>,
     do_parse!(
         ftype: be_u8
             >> fcode: be_u8
             >> checksum: be_u16
-            >> (ICMPV4Hdr_ {
+            >> (ICMPV4Hdr {
                 ftype,
                 fcode,
+                checksum
+            })
+    )
+);
+
+#[derive(Debug)]
+pub struct TCPHdr {
+    sport: u16,
+    dport: u16,
+    seq: u32,
+    ack: u32,
+    offx2: u8,
+    flags: u8,
+}
+named!(
+    tcp_header_parse<TCPHdr>,
+    do_parse!(
+        sport: be_u16
+            >> dport: be_u16
+            >> seq: be_u32
+            >> ack: be_u32
+            >> offx2: be_u8
+            >> flags: be_u8
+            >> (TCPHdr {
+                sport,
+                dport,
+                seq,
+                ack,
+                offx2,
+                flags
+            })
+    )
+);
+
+#[derive(Debug)]
+pub struct UDPHdr {
+    sport: u16,
+    dport: u16,
+    len: u16,
+    checksum: u16,
+}
+named!(
+    udp_header_parse<UDPHdr>,
+    do_parse!(
+        sport: be_u16
+            >> dport: be_u16
+            >> len: be_u16
+            >> checksum: be_u16
+            >> (UDPHdr {
+                sport,
+                dport,
+                len,
                 checksum
             })
     )
@@ -108,13 +160,31 @@ pub fn openflow_data_packet_parse(input: &[u8]) {
                                     );
                                 }
                             }, //icmpv4
-                            0x06 => {} //tcp
-                            0x07 => {} //udp
+                            0x06 => match tcp_header_parse(rem) {
+                                Ok((rem, tcp_header)) => {
+                                    SCLogNotice!("{:?}", tcp_header);
+                                }
+                                Err(_) => {
+                                    SCLogNotice!(
+                                        "Transmission Control Protocol Header Parse Error"
+                                    );
+                                }
+                            }, //tcp
+                            0x07 => match udp_header_parse(rem) {
+                                Ok((rem, udp_header)) => {
+                                    SCLogNotice!("{:?}", udp_header);
+                                }
+                                Err(_) => {
+                                    SCLogNotice!(
+                                        "User Datagram Protocol Header Parse Error"
+                                    );
+                                }
+                            }, //udp
                             _ => {}
                         }
                     }
                     Err(_) => {
-                        SCLogNotice!("Internet Protocol Parse Error");
+                        SCLogNotice!("Internet Protocol Header Parse Error");
                     }
                 }, //IPv4
                 _ => {}

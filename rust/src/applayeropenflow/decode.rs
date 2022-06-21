@@ -175,9 +175,7 @@ pub fn openflow_data_packet_parse(input: &[u8]) {
                                     SCLogNotice!("{:?}", udp_header);
                                 }
                                 Err(_) => {
-                                    SCLogNotice!(
-                                        "User Datagram Protocol Header Parse Error"
-                                    );
+                                    SCLogNotice!("User Datagram Protocol Header Parse Error");
                                 }
                             }, //udp
                             _ => {}

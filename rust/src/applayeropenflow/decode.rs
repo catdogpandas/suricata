@@ -143,16 +143,21 @@ named!(
 pub fn openflow_data_packet_parse(input: &[u8]) {
     match ethernet_header_parse(input) {
         Ok((rem, ethernet_header)) => {
-            SCLogNotice!("{:?}", ethernet_header);
+            // SCLogNotice!("{:?}", ethernet_header);
             match ethernet_header.eth_type {
                 0x0806 => {} //ARP
                 0x0800 => match ipv4_header_parse(rem) {
                     Ok((rem, ipv4_header)) => {
-                        SCLogNotice!("{:?}", ipv4_header);
+                        // SCLogNotice!("{:?}", ipv4_header);
                         match ipv4_header.ip_proto {
                             0x01 => match icmpv4_header_parse(rem) {
                                 Ok((rem, icmpv4_header)) => {
-                                    SCLogNotice!("{:?}", icmpv4_header);
+                                    SCLogNotice!(
+                                        "ICMPPacket {:?} {:?} {:?}",
+                                        ethernet_header,
+                                        ipv4_header,
+                                        icmpv4_header
+                                    );
                                 }
                                 Err(_) => {
                                     SCLogNotice!(
@@ -162,7 +167,12 @@ pub fn openflow_data_packet_parse(input: &[u8]) {
                             }, //icmpv4
                             0x06 => match tcp_header_parse(rem) {
                                 Ok((rem, tcp_header)) => {
-                                    SCLogNotice!("{:?}", tcp_header);
+                                    SCLogNotice!(
+                                        "TCPPacket {:?} {:?} {:?}",
+                                        ethernet_header,
+                                        ipv4_header,
+                                        tcp_header
+                                    );
                                 }
                                 Err(_) => {
                                     SCLogNotice!(
@@ -172,7 +182,12 @@ pub fn openflow_data_packet_parse(input: &[u8]) {
                             }, //tcp
                             0x07 => match udp_header_parse(rem) {
                                 Ok((rem, udp_header)) => {
-                                    SCLogNotice!("{:?}", udp_header);
+                                    SCLogNotice!(
+                                        "UDPPacket {:?} {:?} {:?}",
+                                        ethernet_header,
+                                        ipv4_header,
+                                        udp_header
+                                    );
                                 }
                                 Err(_) => {
                                     SCLogNotice!("User Datagram Protocol Header Parse Error");

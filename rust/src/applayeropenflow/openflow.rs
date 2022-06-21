@@ -15,6 +15,7 @@
  * 02110-1301, USA.
  */
 
+use super::decode::{self};
 use super::parser::{self, OPENFLOWFramePacketIn};
 use crate::applayer::{self, *};
 use crate::core::{self, AppProto, Flow, ALPROTO_UNKNOWN, IPPROTO_TCP};
@@ -129,8 +130,9 @@ impl OPENFLOWState {
                     return OPENFLOWFrameTypeData::UNHANDLED;
                 }
                 match parser::openflow_parse_frame_packetin(input) {
-                    Ok((_, packetin)) => {
+                    Ok((rem, packetin)) => {
                         SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
+                        decode::openflow_data_packet_parse(&packetin.data);
                         return OPENFLOWFrameTypeData::PACKETIN(packetin);
                     }
                     Err(_) => {

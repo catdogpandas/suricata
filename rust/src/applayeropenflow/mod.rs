@@ -18,3 +18,4 @@
 pub mod openflow;
 pub mod logger;
 mod parser;
+mod decode;

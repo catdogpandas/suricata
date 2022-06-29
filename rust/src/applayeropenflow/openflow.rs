@@ -39,8 +39,6 @@ pub struct OPENFLOWFrame {
 pub struct OPENFLOWTransaction {
     tx_id: u64,
     pub frames: Vec<OPENFLOWFrame>,
-    pub request: Option<String>,
-    pub response: Option<String>,
 
     de_state: Option<*mut core::DetectEngineState>,
     events: *mut core::AppLayerDecoderEvents,
@@ -52,8 +50,6 @@ impl OPENFLOWTransaction {
         OPENFLOWTransaction {
             tx_id: 0,
             frames: Vec::new(),
-            request: None,
-            response: None,
             de_state: None,
             events: std::ptr::null_mut(),
             tx_data: AppLayerTxData::new(),
@@ -87,6 +83,10 @@ impl OPENFLOWState {
             tx_id: 0,
             transactions: Vec::new(),
         }
+    }
+
+    fn free(&mut self) {
+        self.transactions.clear();
     }
 
     // Free a transaction by ID.
@@ -253,7 +253,8 @@ pub extern "C" fn rs_openflow_state_new(
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_free(state: *mut std::os::raw::c_void) {
     // Just unbox...
-    let _drop: Box<OPENFLOWState> = unsafe { transmute(state) };
+    let mut _drop: Box<OPENFLOWState> = unsafe { transmute(state) };
+    _drop.free();
 }
 
 #[no_mangle]
@@ -313,7 +314,7 @@ pub extern "C" fn rs_openflow_tx_get_alstate_progress(
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
 
     // Transaction is done if we have a response.
-    if tx.response.is_some() {
+    if !tx.frames.is_empty() {
         return 1;
     }
     return 0;
@@ -364,40 +365,40 @@ pub extern "C" fn rs_openflow_state_get_tx_iterator(
 ///
 /// No required for parsing, but an example function for retrieving a
 /// pointer to the request buffer from C for detection.
-#[no_mangle]
-pub extern "C" fn rs_openflow_get_request_buffer(
-    tx: *mut std::os::raw::c_void, buf: *mut *const u8, len: *mut u32,
-) -> u8 {
-    let tx = cast_pointer!(tx, OPENFLOWTransaction);
-    if let Some(ref request) = tx.request {
-        if request.len() > 0 {
-            unsafe {
-                *len = request.len() as u32;
-                *buf = request.as_ptr();
-            }
-            return 1;
-        }
-    }
-    return 0;
-}
+// #[no_mangle]
+// pub extern "C" fn rs_openflow_get_request_buffer(
+//     tx: *mut std::os::raw::c_void, buf: *mut *const u8, len: *mut u32,
+// ) -> u8 {
+//     let tx = cast_pointer!(tx, OPENFLOWTransaction);
+//     if let Some(ref request) = tx.request {
+//         if request.len() > 0 {
+//             unsafe {
+//                 *len = request.len() as u32;
+//                 *buf = request.as_ptr();
+//             }
+//             return 1;
+//         }
+//     }
+//     return 0;
+// }
 
 /// Get the response buffer for a transaction from C.
-#[no_mangle]
-pub extern "C" fn rs_openflow_get_response_buffer(
-    tx: *mut std::os::raw::c_void, buf: *mut *const u8, len: *mut u32,
-) -> u8 {
-    let tx = cast_pointer!(tx, OPENFLOWTransaction);
-    if let Some(ref response) = tx.response {
-        if response.len() > 0 {
-            unsafe {
-                *len = response.len() as u32;
-                *buf = response.as_ptr();
-            }
-            return 1;
-        }
-    }
-    return 0;
-}
+// #[no_mangle]
+// pub extern "C" fn rs_openflow_get_response_buffer(
+//     tx: *mut std::os::raw::c_void, buf: *mut *const u8, len: *mut u32,
+// ) -> u8 {
+//     let tx = cast_pointer!(tx, OPENFLOWTransaction);
+//     if let Some(ref response) = tx.response {
+//         if response.len() > 0 {
+//             unsafe {
+//                 *len = response.len() as u32;
+//                 *buf = response.as_ptr();
+//             }
+//             return 1;
+//         }
+//     }
+//     return 0;
+// }
 
 export_tx_data_get!(rs_openflow_get_tx_data, OPENFLOWTransaction);
 

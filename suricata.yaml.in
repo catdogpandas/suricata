@@ -723,7 +723,7 @@ app-layer:
     openflow:
       enabled: yes
       detection-ports:
-        dp: 6633
+        dp: 6633, 6653
     rfb:
       enabled: yes
       detection-ports:

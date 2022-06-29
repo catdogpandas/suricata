@@ -20,11 +20,8 @@ use crate::jsonbuilder::{JsonBuilder, JsonError};
 use super::openflow::OPENFLOWTransaction;
 
 fn log_openflow(tx: &OPENFLOWTransaction, js: &mut JsonBuilder) -> Result<(), JsonError> {
-    if let Some(ref request) = tx.request {
-        js.set_string("request", request)?;
-    }
-    if let Some(ref response) = tx.response {
-        js.set_string("response", response)?;
+    if !tx.frames.is_empty() {
+        js.set_string("request", "request")?;
     }
     Ok(())
 }

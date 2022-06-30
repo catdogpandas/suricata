@@ -68,7 +68,7 @@ typedef struct LogOPENFLOWLogThread_ {
 static int JsonOPENFLOWLogger(ThreadVars *tv, void *thread_data,
     const Packet *p, Flow *f, void *state, void *tx, uint64_t tx_id)
 {
-    SCLogNotice("JsonOPENFLOWLogger");
+    // SCLogNotice("JsonOPENFLOWLogger");
     LogOPENFLOWLogThread *thread = thread_data;
 
     JsonBuilder *js = CreateEveHeader(p, LOG_DIR_PACKET, "openflow", NULL);

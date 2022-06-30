@@ -131,7 +131,7 @@ impl OPENFLOWState {
                 }
                 match parser::openflow_parse_frame_packetin(input) {
                     Ok((rem, packetin)) => {
-                        SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
+                        //SCLogNotice!("OPENFLOWFramePacketIn: {:?}", packetin);
                         decode::openflow_data_packet_parse(&packetin.data);
                         return OPENFLOWFrameTypeData::PACKETIN(packetin);
                     }
@@ -148,16 +148,16 @@ impl OPENFLOWState {
 
     fn parse_request(&mut self, input: &[u8]) -> AppLayerResult {
         // We're not interested in empty requests.
-        if input.len() == 0 {
-            return AppLayerResult::ok();
-        }
+        // if input.len() == 0 {
+        //     return AppLayerResult::ok();
+        // }
 
         let mut start = input;
         while start.len() > 0 {
             match parser::openflow_parse_frame_header(start) {
                 Ok((rem, head)) => {
                     start = rem;
-                    if head.ftype == 0xa {
+                    if head.ftype == 0xa && head.version==0x04{
                         SCLogNotice!(
                             "OPENFLOWFrameHeader: {} {} {} {}",
                             head.version,
@@ -168,8 +168,15 @@ impl OPENFLOWState {
                         //SCLogNotice!("OPENFLOWFramePacketIn: {:?}", rem);
                     }
                     // for packet_in data
-                    if head.ftype != 0xa {
-                        continue;
+                    if head.ftype != 0xa||head.version !=0x04 {
+                        // let mut tx = self.new_tx();
+                        // tx.frames.push(OPENFLOWFrame {
+                        //     header: head,
+                        //     data: OPENFLOWFrameTypeData::UNHANDLED,
+                        // });
+                        // self.transactions.push(tx);
+                        return AppLayerResult::ok();
+                        
                     }
                     let txdata = self.parse_frame_data(head.ftype, &rem[..]);
 
@@ -179,6 +186,7 @@ impl OPENFLOWState {
                         data: txdata,
                     });
                     self.transactions.push(tx);
+                    //return AppLayerResult::ok();
                 }
                 Err(nom::Err::Incomplete(_)) => {
                     // Not enough data. This parser doesn't give us a good indication
@@ -228,15 +236,16 @@ export_tx_set_detect_state!(rs_openflow_tx_set_detect_state, OPENFLOWTransaction
 pub extern "C" fn rs_openflow_probing_parser(
     _flow: *const Flow, _direction: u8, input: *const u8, input_len: u32, _rdir: *mut u8,
 ) -> AppProto {
+    // SCLogNotice!("hash1");
     // Need at least 2 bytes.
-    if input_len >= 8 && input != std::ptr::null_mut() {
+    if input != std::ptr::null_mut() {
         //SCLogNotice!("- Request: {:?}", input);
         let slice = build_slice!(input, input_len as usize);
         let openflow_version = slice[0];
         // version from 1 to 7
-        //if openflow_version <= 7 {
-        return unsafe { ALPROTO_OPENFLOW };
-        //}
+        if openflow_version ==4 {
+            return unsafe { ALPROTO_OPENFLOW };
+        }
     }
     return ALPROTO_UNKNOWN;
 }
@@ -245,6 +254,7 @@ pub extern "C" fn rs_openflow_probing_parser(
 pub extern "C" fn rs_openflow_state_new(
     _orig_state: *mut std::os::raw::c_void, _orig_proto: AppProto,
 ) -> *mut std::os::raw::c_void {
+    // SCLogNotice!("hash2");
     let state = OPENFLOWState::new();
     let boxed = Box::new(state);
     return unsafe { transmute(boxed) };
@@ -253,27 +263,31 @@ pub extern "C" fn rs_openflow_state_new(
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_free(state: *mut std::os::raw::c_void) {
     // Just unbox...
+    // SCLogNotice!("hash3");
     let mut _drop: Box<OPENFLOWState> = unsafe { transmute(state) };
     _drop.free();
 }
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_tx_free(state: *mut std::os::raw::c_void, tx_id: u64) {
+    // SCLogNotice!("hash4");
     let state = cast_pointer!(state, OPENFLOWState);
     state.free_tx(tx_id);
 }
 
 #[no_mangle]
 pub extern "C" fn rs_openflow_parse_request(
-    _flow: *const Flow, state: *mut std::os::raw::c_void, pstate: *mut std::os::raw::c_void,
+    _flow: *const Flow, state: *mut std::os::raw::c_void, _pstate: *mut std::os::raw::c_void,
     input: *const u8, input_len: u32, _data: *const std::os::raw::c_void, _flags: u8,
 ) -> AppLayerResult {
     let state = cast_pointer!(state, OPENFLOWState);
 
-    if input == std::ptr::null_mut() && input_len > 0 {
+    if input == std::ptr::null_mut() {
+        //SCLogNotice!("hash5 input==null");
         AppLayerResult::ok()
     } else {
         let buf = build_slice!(input, input_len as usize);
+        //SCLogNotice!("hash5 input length: {:?}", input_len);
         state.parse_request(buf)
     }
 }
@@ -282,6 +296,7 @@ pub extern "C" fn rs_openflow_parse_request(
 pub extern "C" fn rs_openflow_state_get_tx(
     state: *mut std::os::raw::c_void, tx_id: u64,
 ) -> *mut std::os::raw::c_void {
+    // SCLogNotice!("hash7");
     let state = cast_pointer!(state, OPENFLOWState);
     match state.get_tx(tx_id) {
         Some(tx) => {
@@ -296,6 +311,7 @@ pub extern "C" fn rs_openflow_state_get_tx(
 #[no_mangle]
 pub extern "C" fn rs_openflow_state_get_tx_count(state: *mut std::os::raw::c_void) -> u64 {
     let state = cast_pointer!(state, OPENFLOWState);
+    // SCLogNotice!("hash6 {:?}",state.tx_id);
     return state.tx_id;
 }
 
@@ -304,6 +320,7 @@ pub extern "C" fn rs_openflow_state_progress_completion_status(
     _direction: u8,
 ) -> std::os::raw::c_int {
     // This parser uses 1 to signal transaction completion status.
+    // SCLogNotice!("hash8");
     return 1;
 }
 
@@ -311,6 +328,7 @@ pub extern "C" fn rs_openflow_state_progress_completion_status(
 pub extern "C" fn rs_openflow_tx_get_alstate_progress(
     tx: *mut std::os::raw::c_void, _direction: u8,
 ) -> std::os::raw::c_int {
+    // SCLogNotice!("hash9");
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
 
     // Transaction is done if we have a response.
@@ -324,6 +342,7 @@ pub extern "C" fn rs_openflow_tx_get_alstate_progress(
 pub extern "C" fn rs_openflow_state_get_events(
     tx: *mut std::os::raw::c_void,
 ) -> *mut core::AppLayerDecoderEvents {
+    // SCLogNotice!("hash10");
     let tx = cast_pointer!(tx, OPENFLOWTransaction);
     return tx.events;
 }
@@ -333,6 +352,7 @@ pub extern "C" fn rs_openflow_state_get_event_info(
     _event_name: *const std::os::raw::c_char, _event_id: *mut std::os::raw::c_int,
     _event_type: *mut core::AppLayerEventType,
 ) -> std::os::raw::c_int {
+    // SCLogNotice!("hash11");
     return -1;
 }
 
@@ -341,6 +361,7 @@ pub extern "C" fn rs_openflow_state_get_event_info_by_id(
     _event_id: std::os::raw::c_int, _event_name: *mut *const std::os::raw::c_char,
     _event_type: *mut core::AppLayerEventType,
 ) -> i8 {
+    // SCLogNotice!("hash12");
     return -1;
 }
 #[no_mangle]
@@ -348,6 +369,7 @@ pub extern "C" fn rs_openflow_state_get_tx_iterator(
     _ipproto: u8, _alproto: AppProto, state: *mut std::os::raw::c_void, min_tx_id: u64,
     _max_tx_id: u64, istate: &mut u64,
 ) -> applayer::AppLayerGetTxIterTuple {
+    // SCLogNotice!("hash14");
     let state = cast_pointer!(state, OPENFLOWState);
     match state.tx_iterator(min_tx_id, istate) {
         Some((tx, out_tx_id, has_next)) => {

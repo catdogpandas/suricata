@@ -244,6 +244,39 @@ static int DecodeTCPPacket(ThreadVars *tv, Packet *p, const uint8_t *pkt, uint16
 
     p->payload = (uint8_t *)pkt + hlen;
     p->payload_len = len - hlen;
+    // temporary method
+    
+    uint8_t * openflow_start = p->payload;
+    uint16_t openflow_head = *(uint16_t*)openflow_start;
+    if (openflow_head==0x0A04){
+        //printf("find \n");
+    }else{
+        return 0;
+    }
+    // OpenFlow Header
+    typedef struct _openflow_header
+    {
+        uint8_t version;
+        uint8_t type;
+        uint16_t length;
+        uint32_t transacton_id;
+    } openflow_header;
+    openflow_header ofh;
+    ofh = *(openflow_header*)openflow_start;
+    ofh.length = ((ofh.length&0x00ff)<<8)|((ofh.length&0xff00)>>8);
+    //printf("type: %d, length: %2x, total_length: %d\n",ofh.type,ofh.length,p->payload_len);
+    typedef struct _openflow_packet_in_header
+    {
+        uint32_t buffer_id;
+        uint16_t total_length;
+        uint8_t reason;
+        uint8_t table_id;
+        uint64_t cookie;
+    }openflow_packet_in_header;
+    openflow_packet_in_header ofpih;
+    ofpih = *(openflow_packet_in_header*)(openflow_start+sizeof(openflow_header));
+    ofpih.total_length = ((ofpih.total_length&0x00ff)<<8)|((ofpih.total_length&0xff00)>>8);
+    //printf("buffer id: %8x, total length: %2x",ofpih.buffer_id, ofpih.total_length);
 
     return 0;
 }

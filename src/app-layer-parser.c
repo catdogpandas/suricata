@@ -1641,7 +1641,7 @@ void AppLayerParserRegisterProtocolParsers(void)
     RegisterTemplateRustParsers();
     RegisterRFBParsers();
     RegisterMQTTParsers();
-    RegisterOPENFLOWParsers();
+    //RegisterOPENFLOWParsers();
     RegisterTemplateParsers();
     RegisterRdpParsers();
     RegisterHTTP2Parsers();

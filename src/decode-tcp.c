@@ -265,6 +265,7 @@ static int DecodeTCPPacket(ThreadVars *tv, Packet *p, const uint8_t *pkt, uint16
     ofh = *(openflow_header*)openflow_start;
     ofh.length = ((ofh.length&0x00ff)<<8)|((ofh.length&0xff00)>>8);
     //printf("type: %d, length: %2x, total_length: %d\n",ofh.type,ofh.length,p->payload_len);
+    // PacketIn Header
     typedef struct _openflow_packet_in_header
     {
         uint32_t buffer_id;
@@ -277,7 +278,74 @@ static int DecodeTCPPacket(ThreadVars *tv, Packet *p, const uint8_t *pkt, uint16
     ofpih = *(openflow_packet_in_header*)(openflow_start+sizeof(openflow_header));
     ofpih.total_length = ((ofpih.total_length&0x00ff)<<8)|((ofpih.total_length&0xff00)>>8);
     //printf("buffer id: %8x, total length: %2x",ofpih.buffer_id, ofpih.total_length);
-
+    // Match Length
+    uint8_t match_length_left = *(openflow_start+sizeof(openflow_header)+sizeof(openflow_packet_in_header)+2);
+    uint8_t match_length_right = *(openflow_start+sizeof(openflow_header)+sizeof(openflow_packet_in_header)+3);
+    uint16_t match_length = ((match_length_left&0x00ff)<<8)|(match_length_right&0x00ff);
+    //Data start
+    uint8_t* opf_pi_data = openflow_start+sizeof(openflow_header)+sizeof(openflow_packet_in_header)+4+match_length+2;
+    //Eth
+    EthernetHdr *opf_ethh;
+    opf_ethh = (EthernetHdr *)opf_pi_data;
+    //printf("Eth type: %02x\n",opf_ethh->eth_type);
+    //Ipv4
+    if(opf_ethh->eth_type!=0x0008){
+        return 0;
+    }
+    IPV4Hdr *opf_ip4h;
+    opf_ip4h = (IPV4Hdr *)(opf_pi_data+sizeof(EthernetHdr));
+    char opf_ip_src[20]={0};
+    char opf_ip_dst[20]={0};
+    sprintf(opf_ip_src,"%s",inet_ntoa(opf_ip4h->s_ip_src));
+    sprintf(opf_ip_dst,"%s",inet_ntoa(opf_ip4h->s_ip_dst));
+    //printf("ip_proto: %1x, ip: %s, ip: %s\n",opf_ip4h->ip_proto,opf_ip_src,opf_ip_dst);
+    //ICMP TCP UDP
+    char printbuf[5000]={0};
+    if(opf_ip4h->ip_proto==0x1){
+        ICMPV4Hdr *opf_icmph;
+        opf_icmph = (ICMPV4Hdr*)(opf_pi_data+sizeof(EthernetHdr)+sizeof(IPV4Hdr));
+        sprintf(printbuf,
+            "ICMPPacket EthernetHdr { eth_dst: %1x:%1x:%1x:%1x:%1x:%1x, eth_src: %1x:%1x:%1x:%1x:%1x:%1x, eth_type: %d } "
+            "IPV4Hdr { ip_verhl: %d, ip_tos: %d, ip_len: %d, ip_id: %d, ip_off: %d, ip_ttl: %d, ip_proto: %d, ip_csum: %d, ip_src: %s, ip_dst: %s } "
+            "ICMPPHdr {  }",
+            opf_ethh->eth_dst[0],opf_ethh->eth_dst[1],opf_ethh->eth_dst[2],opf_ethh->eth_dst[3],opf_ethh->eth_dst[4],opf_ethh->eth_dst[5],
+            opf_ethh->eth_src[0],opf_ethh->eth_src[1],opf_ethh->eth_src[2],opf_ethh->eth_src[3],opf_ethh->eth_src[4],opf_ethh->eth_src[5],
+            opf_ethh->eth_type,
+            opf_ip4h->ip_verhl,opf_ip4h->ip_tos,opf_ip4h->ip_len,opf_ip4h->ip_id,opf_ip4h->ip_off,opf_ip4h->ip_ttl,opf_ip4h->ip_proto,opf_ip4h->ip_csum,
+            opf_ip_src,opf_ip_dst
+        );
+        SCLogNotice("%s", printbuf);
+    }else if(opf_ip4h->ip_proto==0x6){
+        TCPHdr *opf_tcph;
+        opf_tcph = (TCPHdr*)(opf_pi_data+sizeof(EthernetHdr)+sizeof(IPV4Hdr));
+        sprintf(printbuf,
+            "TCPPacket EthernetHdr { eth_dst: %1x:%1x:%1x:%1x:%1x:%1x, eth_src: %1x:%1x:%1x:%1x:%1x:%1x, eth_type: %d } "
+            "IPV4Hdr { ip_verhl: %d, ip_tos: %d, ip_len: %d, ip_id: %d, ip_off: %d, ip_ttl: %d, ip_proto: %d, ip_csum: %d, ip_src: %s, ip_dst: %s } "
+            "TCPHdr { sport: %d, dport: %d }",
+            opf_ethh->eth_dst[0],opf_ethh->eth_dst[1],opf_ethh->eth_dst[2],opf_ethh->eth_dst[3],opf_ethh->eth_dst[4],opf_ethh->eth_dst[5],
+            opf_ethh->eth_src[0],opf_ethh->eth_src[1],opf_ethh->eth_src[2],opf_ethh->eth_src[3],opf_ethh->eth_src[4],opf_ethh->eth_src[5],
+            opf_ethh->eth_type,
+            opf_ip4h->ip_verhl,opf_ip4h->ip_tos,opf_ip4h->ip_len,opf_ip4h->ip_id,opf_ip4h->ip_off,opf_ip4h->ip_ttl,opf_ip4h->ip_proto,opf_ip4h->ip_csum,
+            opf_ip_src,opf_ip_dst,
+            opf_tcph->th_sport,opf_tcph->th_dport
+        );
+        SCLogNotice("%s", printbuf);
+    }else if(opf_ip4h->ip_proto==0x11){
+        UDPHdr *opf_udph;
+        opf_udph = (UDPHdr*)(opf_pi_data+sizeof(EthernetHdr)+sizeof(IPV4Hdr));
+        sprintf(printbuf,
+            "UDPPacket EthernetHdr { eth_dst: %1x:%1x:%1x:%1x:%1x:%1x, eth_src: %1x:%1x:%1x:%1x:%1x:%1x, eth_type: %d } "
+            "IPV4Hdr { ip_verhl: %d, ip_tos: %d, ip_len: %d, ip_id: %d, ip_off: %d, ip_ttl: %d, ip_proto: %d, ip_csum: %d, ip_src: %s, ip_dst: %s } "
+            "UDPHdr { sport: %d, dport: %d }",
+            opf_ethh->eth_dst[0],opf_ethh->eth_dst[1],opf_ethh->eth_dst[2],opf_ethh->eth_dst[3],opf_ethh->eth_dst[4],opf_ethh->eth_dst[5],
+            opf_ethh->eth_src[0],opf_ethh->eth_src[1],opf_ethh->eth_src[2],opf_ethh->eth_src[3],opf_ethh->eth_src[4],opf_ethh->eth_src[5],
+            opf_ethh->eth_type,
+            opf_ip4h->ip_verhl,opf_ip4h->ip_tos,opf_ip4h->ip_len,opf_ip4h->ip_id,opf_ip4h->ip_off,opf_ip4h->ip_ttl,opf_ip4h->ip_proto,opf_ip4h->ip_csum,
+            opf_ip_src,opf_ip_dst,
+            opf_udph->uh_sport,opf_udph->uh_dport
+        );
+        SCLogNotice("%s", printbuf);
+    }
     return 0;
 }
 
